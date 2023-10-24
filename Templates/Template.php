@@ -208,7 +208,15 @@ class Template extends AbstractTemplate
      */
     public function toArray(): array
     {
-        return (array)$this;
+        $reflector = new \ReflectionClass($this);
+        $properties = $reflector->getProperties();
+        $result = [];
+
+        foreach($properties as $property)
+        {
+            $result[$this->{$property->getName()}->name] = $this->{$property->getName()}->value;
+        }
+        return $result;
     }
 
 }
