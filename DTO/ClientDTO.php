@@ -20,7 +20,7 @@ class ClientDTO extends AbstractPersonDTO
      * @param string|null $name
      * @param SellerDTO|null $seller
      */
-    public function __construct(int $id = null, int $type = null, string $name = null, SellerDTO $seller = null)
+    public function __construct(?int $id, ?int $type, ?string $name, ?SellerDTO $seller)
     {
         parent::__construct($id, $type, $name);
         $this->seller = $seller;

@@ -14,7 +14,7 @@ class SellerFactory extends AbstractFactory
      * @param int $id
      * @return null|\NW\WebService\References\DTO\AbstractPersonDTO
      */
-    public static function getById(int $id)
+    public static function getById(int $id): SellerDTO
     {
         $clientDto = new SellerDTO($id);
         $clientModel = new SellerModel($clientDto);

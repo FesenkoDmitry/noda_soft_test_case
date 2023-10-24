@@ -4,15 +4,15 @@
 namespace NW\WebService\References\Models;
 
 
-use NW\WebService\References\DTO\AbstractPersonDTO;
+use NW\WebService\References\DTO\SellerDTO;
 
 class SellerModel extends AbstractModel
 {
 
     /**
-     * @return AbstractPersonDTO|null
+     * @return SellerDTO|null
      */
-    public function findOrFail(): ?AbstractPersonDTO
+    public function findOrFail(): ?SellerDTO
     {
         // TODO: Implement getById() method.
     }

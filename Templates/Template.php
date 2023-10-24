@@ -211,20 +211,4 @@ class Template extends AbstractTemplate
         return (array)$this;
     }
 
-    /**
-     * @return array
-     */
-    public function getEmptyFields(): array
-    {
-        $result = [];
-
-        $templateData = $this->toArray();
-        foreach ($templateData as $key => $tempData) {
-            if (empty($tempData)) {
-                $result[] = $key;
-            }
-        }
-
-        return $result;
-    }
 }

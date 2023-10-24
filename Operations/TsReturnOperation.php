@@ -11,80 +11,84 @@ use NW\WebService\References\Factories\EmployeeFactory;
 use NW\WebService\References\Factories\SellerFactory;
 use NW\WebService\References\Templates\Template;
 use NW\WebService\References\Utils\Utils;
+use NW\WebService\References\DTO\SellerDTO;
+use NW\WebService\References\DTO\ClientDTO;
+use NW\WebService\References\DTO\EmployeeDTO;
 
 class TsReturnOperation extends AbstractOperation
 {
 
     /**
+     * @var array
+     */
+    private $data;
+    /**
+     * @var SellerDTO|null
+     */
+    private $reseller;
+    /**
+     * @var ClientDTO|null
+     */
+    private $client;
+    /**
+     * @var EmployeeDTO|null
+     */
+    private $creator;
+    /**
+     * @var EmployeeDTO|null
+     */
+    private $expert;
+    /**
+     * @var int
+     */
+    private $notificationType;
+    /**
+     * @var int
+     */
+    private $previousStatusId;
+    /**
+     * @var int
+     */
+    private $currentStatusId;
+    /**
+     * @var int
+     */
+    private $complaintId;
+    /**
+     * @var string
+     */
+    private $complaintNumber;
+    /**
+     * @var int
+     */
+    private $consumptionId;
+    /**
+     * @var string
+     */
+    private $consumptionNumber;
+    /**
+     * @var string
+     */
+    private $agreementNumber;
+    /**
+     * @var string
+     */
+    private $date;
+    /**
+     * @var array|null
+     */
+    private $differences;
+
+    /**
      * @return array
      * @throws DataValidationException
-     * @throws PersonNotFoundException
-     * @throws TemplateEmptyFieldsException
      */
     public function doOperation(): array
     {
-        $data = Utils::getDataFromRequest();
-
-        $this->checkRequestData($data);
-
-        $resellerId = (int)$data['resellerId'];
-        $reseller = SellerFactory::getById($resellerId);
-        if ($reseller === null) {
-            throw new PersonNotFoundException('Seller', $resellerId);
-        }
-
-        $clientId = (int)$data['clientId'];
-        $client = ClientFactory::getById($clientId);
-        if ($client === null || $client->getType() !== PERSON_TYPE_CUSTOMER || $client->getSeller()->getId() !== $resellerId) {
-            throw new PersonNotFoundException('Client', $clientId);
-        }
-
-        $creatorId = (int)$data['creatorId'];
-        $creator = EmployeeFactory::getById($creatorId);
-        if ($creator === null) {
-            throw new PersonNotFoundException('Employee (creator)', $creatorId);
-        }
-
-        $expertId = (int)$data['expertId'];
-        $expert = EmployeeFactory::getById($expertId);
-
-        if ($expert === null) {
-            throw new PersonNotFoundException('Employee (expert)', $creatorId);
-        }
-
-        $notificationType = (int)$data['notificationType'];
-        $previousStatusId = (int)$data['differences']['from'];
-        $currentStatusId = (int)$data['differences']['to'];
-        $differences = '';
-        if ($notificationType === NOTIFICATION_TYPE_NEW) {
-            $differences = __('NewPositionAdded', null, $resellerId);
-        } elseif ($notificationType === NOTIFICATION_TYPE_CHANGE && !empty($data['differences'])) {
-            $differences = __('PositionStatusHasChanged', [
-                'FROM' => STATUSES[$previousStatusId],
-                'TO' => STATUSES[$currentStatusId],
-            ], $resellerId);
-        }
-
-        $template = new Template();
-        $template->setComplaintIdField((int)$data['complaintId']);
-        $template->setComplaintNumberField((string)$data['complaintNumber']);
-        $template->setCreatorIdField($creatorId);
-        $template->setCreatorNameField($creator->getFullName());
-        $template->setExpertIdField($expertId);
-        $template->setExpertNameField($expert->getFullName());
-        $template->setClientIdField($clientId);
-        $template->setClientNameField($client->getFullName());
-        $template->setConsumptionIdField((int)$data['consumptionId']);
-        $template->setConsumptionNumberField((string)$data['consumptionNumber']);
-        $template->setAgreementNumberField((string)$data['agreementNumber']);
-        $template->setDateField((string)$data['date']);
-        $template->setDifferencesField($differences);
-
-        // Если хоть одна переменная для шаблона не задана, то не отправляем уведомления
-        $emptyFields = $template->getEmptyFields();
-        if (!$emptyFields){
-            throw new TemplateEmptyFieldsException($emptyFields);
-        }
+        $this->data = Utils::getDataFromRequest();
+        $this->fillProperties();
+        $this->validateProperties();
+        $template = $this->makeTemplate();
 
         $result = [
             'notificationEmployeeByEmail' => false,
@@ -95,32 +99,136 @@ class TsReturnOperation extends AbstractOperation
             ],
         ];
 
-        $emailFrom = getResellerEmailFrom($resellerId);
+        $this->sendEmployeeNotification($template);
+        $result['notificationEmployeeByEmail'] = true;
+        $sendResult = $this->sendClientNotification($template);
+        $result['notificationClientByEmail'] = $sendResult['notificationClientByEmail'] ?? false;
+        $result['notificationClientBySms']['isSent'] = $sendResult['notificationClientBySms']['isSent'] ?? false;
+        $result['notificationClientBySms']['message'] = $sendResult['notificationClientBySms']['message'] ?? '';
+
+        return $result;
+    }
+
+    /**
+     * @return Template
+     */
+    private function makeTemplate(): Template
+    {
+        $template = new Template();
+        $template->setComplaintIdField($this->complaintId);
+        $template->setComplaintNumberField($this->complaintNumber);
+        $template->setCreatorIdField($this->creator->getId());
+        $template->setCreatorNameField($this->creator->getFullName());
+        $template->setExpertIdField($this->expert->getId());
+        $template->setExpertNameField($this->expert->getFullName());
+        $template->setClientIdField($this->client->getId());
+        $template->setClientNameField($this->client->getFullName());
+        $template->setConsumptionIdField($this->consumptionId);
+        $template->setConsumptionNumberField($this->consumptionNumber);
+        $template->setAgreementNumberField($this->agreementNumber);
+        $template->setDateField($this->date);
+        $template->setDifferencesField($this->differences);
+
+        return $template;
+    }
+
+    /**
+     * @return array|null
+     */
+    private function getDifferences()
+    {
+        $differences = null;
+        if ($this->notificationType === NOTIFICATION_TYPE_NEW) {
+            $differences = __('NewPositionAdded', null, $this->reseller->getId());
+        } elseif ($this->notificationType === NOTIFICATION_TYPE_CHANGE && !empty($data['differences'])) {
+            $differences = __('PositionStatusHasChanged', [
+                'FROM' => STATUSES[$this->previousStatusId],
+                'TO' => STATUSES[$this->currentStatusId],
+            ], $this->reseller->getId());
+        }
+
+        return $differences;
+    }
+
+    /**
+     * @throws DataValidationException
+     */
+    private function validateProperties(): void
+    {
+        $reflector = new \ReflectionClass($this);
+        $properties = $reflector->getProperties();
+
+        foreach ($properties as $property) {
+            if (empty($this->{$property->getName()})) {
+                throw new DataValidationException($property);
+            }
+        }
+    }
+
+    /**
+     */
+    private function fillProperties(): void
+    {
+        $this->notificationType = (int)$this->data['notificationType'];
+        $this->previousStatusId = (int)$this->data['differences']['from'];
+        $this->currentStatusId = (int)$this->data['differences']['to'];
+        $this->complaintId = (int)$this->data['complaintId'];
+        $this->complaintNumber = (string)$this->data['complaintNumber'];
+        $this->consumptionId = (int)$this->data['consumptionId'];
+        $this->consumptionNumber = (string)$this->data['consumptionNumber'];
+        $this->agreementNumber = (string)$this->data['agreementNumber'];
+        $this->date = (string)$this->data['date'];
+        $this->differences = $this->getDifferences();
+
+        $resellerId = (int)$this->data['resellerId'];
+        $this->reseller = SellerFactory::getById($resellerId);
+
+        $clientId = (int)$this->data['clientId'];
+        $this->client = ClientFactory::getById($clientId);
+
+        $creatorId = (int)$this->data['creatorId'];
+        $this->creator = EmployeeFactory::getById($creatorId);
+
+        $expertId = (int)$this->data['expertId'];
+        $this->expert = EmployeeFactory::getById($expertId);
+    }
+
+    /**
+     * @param \NW\WebService\References\Templates\Template $template
+     */
+    private function sendEmployeeNotification(Template $template): void
+    {
+        $emailFrom = Utils::getResellerEmailFrom();
         // Получаем email сотрудников из настроек
-        $emails = getEmailsByPermit($resellerId, 'tsGoodsReturn');
+        $emails = Utils::getEmailsByPermit($this->reseller->getId(), 'tsGoodsReturn');
         if (!empty($emailFrom) && count($emails) > 0) {
             foreach ($emails as $emailTo) {
                 MessagesClient::sendMessage([
-                    0 => $this->makeEmailMessage($emailFrom, $emailTo, $template, $resellerId),
-                ], $resellerId, NOTIFICATION_EVENT_CHANGE_RETURN_STATUS);
-                $result['notificationEmployeeByEmail'] = true;
-
+                    0 => $this->makeEmailMessage($emailFrom, $emailTo, $template, $this->reseller->getId()),
+                ], $this->reseller->getId(), NOTIFICATION_EVENT_CHANGE_RETURN_STATUS);
             }
         }
+    }
 
-        // Шлём клиентское уведомление, только если произошла смена статуса
-        if ($notificationType === NOTIFICATION_TYPE_CHANGE) {
-            $emailTo = $client->getEmail();
+    /**
+     * @param \NW\WebService\References\Templates\Template $template
+     * @return array
+     */
+    private function sendClientNotification(Template $template): array
+    {
+        $result = [];
+        if ($this->notificationType === NOTIFICATION_TYPE_CHANGE) {
+            $emailTo = $this->client->getEmail();
             if (!empty($emailFrom) && !empty($emailTo)) {
                 MessagesClient::sendMessage([
-                    0 => $this->makeEmailMessage($emailFrom, $emailTo, $template, $resellerId),
-                ], $resellerId, $client->getId(), NOTIFICATION_EVENT_CHANGE_RETURN_STATUS, (int)$data['differences']['to']);
+                    0 => $this->makeEmailMessage($emailFrom, $emailTo, $template, $this->reseller->getId()),
+                ], $this->reseller->getId(), $this->client->getId(), NOTIFICATION_EVENT_CHANGE_RETURN_STATUS, $this->previousStatusId);
                 $result['notificationClientByEmail'] = true;
             }
 
-            $clientMobile = $client->getMobile();
+            $clientMobile = $this->client->getMobile();
             if (!empty($clientMobile)) {
-                $res = NotificationManager::send($resellerId, $clientId, NOTIFICATION_TYPE_CHANGE, $previousStatusId, $template->toArray());
+                $res = NotificationManager::send($this->reseller->getId(), $this->client->getId(), NOTIFICATION_TYPE_CHANGE, $this->previousStatusId, $template->toArray());
                 if ($res) {
                     $result['notificationClientBySms']['isSent'] = true;
                     $result['notificationClientBySms']['message'] = $res; // не уверен, что метод send возвращает отправленное сообщение, как предположение
@@ -132,29 +240,6 @@ class TsReturnOperation extends AbstractOperation
     }
 
     /**
-     * @param array $data
-     * @throws DataValidationException
-     */
-    private function checkRequestData(array $data): void
-    {
-        if (empty($data)) {
-            throw new DataValidationException('data');
-        }
-
-        if (empty($notificationType)) {
-            throw new DataValidationException('notificationType');
-        }
-
-        if (empty($data['differences']['from'])){
-            throw new DataValidationException('differences[from]');
-        }
-
-        if (empty($data['differences']['to'])){
-            throw new DataValidationException('differences[to]');
-        }
-    }
-
-    /**
      * @param string $emailFrom
      * @param string $emailTo
      * @param Template $template
@@ -162,15 +247,15 @@ class TsReturnOperation extends AbstractOperation
      * @param string $type
      * @return array
      */
-    private function makeEmailMessage(string $emailFrom, string $emailTo, Template $template, int $sellerId, string $type = 'Employee'):array
+    private function makeEmailMessage(string $emailFrom, string $emailTo, Template $template, string $type = 'Employee'): array
     {
         $subjectType = $type == 'Employee' ? 'complaintEmployeeEmailSubject' : 'complaintClientEmailSubject';
         $messageType = $type == 'Employee' ? 'complaintEmployeeEmailBody' : 'complaintClientEmailBody';
         return [ // MessageTypes::EMAIL
             'emailFrom' => $emailFrom,
             'emailTo' => $emailTo,
-            'subject' => __($subjectType, $template->toArray(), $sellerId),
-            'message' => __($messageType, $template->toArray(), $sellerId),
+            'subject' => __($subjectType, $template->toArray(), $this->reseller->getId()),
+            'message' => __($messageType, $template->toArray(), $this->reseller->getId()),
         ];
     }
 }

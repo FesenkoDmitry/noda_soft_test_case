@@ -4,15 +4,15 @@
 namespace NW\WebService\References\Models;
 
 
-use NW\WebService\References\DTO\AbstractPersonDTO;
+use NW\WebService\References\DTO\ClientDTO;
 
 class ClientModel extends AbstractModel
 {
 
     /**
-     * @return AbstractPersonDTO|null
+     * @return ClientDTO|null
      */
-    public function findOrFail(): ?AbstractPersonDTO
+    public function findOrFail(): ?ClientDTO
     {
         // TODO: Implement getById() method.
     }

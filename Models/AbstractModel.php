@@ -21,7 +21,7 @@ abstract class AbstractModel
     }
 
     /**
-     * @return AbstractPersonDTO|null
+     * @return mixed
      */
-    abstract public function findOrFail(): ?AbstractPersonDTO;
+    abstract public function findOrFail();
 }

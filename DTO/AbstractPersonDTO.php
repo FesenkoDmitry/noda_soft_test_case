@@ -27,9 +27,9 @@ abstract class AbstractPersonDTO
      * AbstractPersonDTO constructor.
      * @param int|null $id
      * @param int|null $type
-     * @param string $name
+     * @param string|null $name
      */
-    public function __construct(?int $id, ?int $type, string $name = '')
+    public function __construct(?int $id, ?int $type, ?string $name)
     {
         $this->id = $id;
         $this->type = $type;

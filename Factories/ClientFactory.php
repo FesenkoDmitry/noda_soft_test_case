@@ -10,11 +10,7 @@ use NW\WebService\References\Models\ClientModel;
 class ClientFactory extends AbstractFactory
 {
 
-    /**
-     * @param int $id
-     * @return null|\NW\WebService\References\DTO\AbstractPersonDTO
-     */
-    public static function getById(int $id)
+    public static function getById(int $id): ClientDTO
     {
         $clientDto = new ClientDTO($id);
         $clientModel = new ClientModel($clientDto);
