@@ -12,9 +12,9 @@ class EmployeeFactory extends AbstractFactory
 
     /**
      * @param int $id
-     * @return null|\NW\WebService\References\DTO\AbstractPersonDTO
+     * @return \NW\WebService\References\DTO\EmployeeDTO
      */
-    public static function getById(int $id): EmployeeDTO
+    public static function getById(int $id): ?EmployeeDTO
     {
         $clientDto = new EmployeeDTO($id);
         $clientModel = new EmployeeModel($clientDto);
